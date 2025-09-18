@@ -6,7 +6,7 @@ from config.env import env
 from config.settings.components.common import TIME_ZONE
 from config.settings.components.common import USE_TZ
 
-REDIS_URL = env('REDIS_URL', default='redis://redis:6379/0')  # type: ignore  # noqa: PGH003
+REDIS_URL = env('REDIS_CELERY_URL', default='redis://redis:6379/5')  # type: ignore  # noqa: PGH003
 REDIS_SSL = REDIS_URL.startswith('rediss://')  # type: ignore  # noqa: PGH003
 
 if USE_TZ:
@@ -64,4 +64,17 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 30.0,  # every 30 seconds
     },
     # Wars Jobs
+    'get_wars': {  # This will queue up jobs to get ware info and killmails for active wars
+        'task': 'apps.wars.tasks.get_wars',
+        'schedule': crontab(minute='0', hour='*/1'),  # every hour
+    },
+    # Alliance Jobs
+    'get_alliance_list': {
+        'task': 'apps.alliance.tasks.get_alliance_list',
+        'schedule': crontab(minute='0', hour='*/1'),  # every hour
+    },
+    'get_alliance_icons': {
+        'task': 'apps.alliance.tasks.get_alliance_icons',
+        'schedule': crontab(minute='45', hour='11'),  # every day at 11:45 UTC
+    },
 }

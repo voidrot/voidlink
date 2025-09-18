@@ -6,6 +6,7 @@ from django.utils import timezone
 from apps.shared.providers import esi
 from apps.wars.models import War
 from apps.wars.operations import _get_war_details
+from apps.wars.operations import _get_war_killmails
 
 logger = logging.getLogger(__name__)
 
@@ -31,3 +32,8 @@ def get_wars():
 @shared_task(rate_limit='30/m')
 def get_war_details(war_id: int):
     _get_war_details(war_id)
+
+
+@shared_task(rate_limit='30/m')
+def get_war_killmails(war_id: int):
+    _get_war_killmails(war_id)

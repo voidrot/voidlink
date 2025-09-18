@@ -2,7 +2,7 @@ import logging
 import warnings
 from datetime import UTC
 from datetime import datetime
-from hashlib import md5
+from hashlib import blake2b
 from typing import Any
 
 from aiopenapi3 import OpenAPI
@@ -12,7 +12,8 @@ from aiopenapi3.errors import HTTPClientError as base_HTTPClientError
 from aiopenapi3.errors import HTTPServerError as base_HTTPServerError
 from aiopenapi3.request import OperationIndex
 from aiopenapi3.request import RequestBase
-from django.core.cache import cache
+from django.core.cache import CacheHandler
+from django.core.cache import caches
 from httpx import Client
 from httpx import HTTPStatusError
 from httpx import RequestError
@@ -37,6 +38,7 @@ from .app_settings import ESI_APP_UA_EMAIL
 from .app_settings import ESI_APP_UA_NAME
 from .app_settings import ESI_APP_UA_URL
 from .app_settings import ESI_APP_UA_VERSION
+from .app_settings import ESI_CACHE_BACKEND_NAME
 from .app_settings import ESI_CACHE_RESPONSE
 from .app_settings import ESI_CLIENT_CONNECT_TIMEOUT
 from .app_settings import ESI_CLIENT_POOL_TIMEOUT
@@ -46,6 +48,8 @@ from .app_settings import ESI_CLIENT_WRITE_TIMEOUT
 from .app_settings import ESI_COMPATIBILITY_DATE
 from .app_settings import ESI_OPENAPI_URL
 from .models import Token
+
+# import pickle
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +156,10 @@ class BaseESIClientOperation:
         self.method, self.url, self.operation, self.extra = operation
         self.api: OpenAPI = api
         self.token: Token | None = None
-        self._args = []
-        self._kwargs = {}
+        self._args: list[Any] = []  # Added type annotation for _args
+        self._kwargs: dict[str, Any] = {}
+        # self._cache: Redis = Redis().from_url(settings.ESI_REDIS_URL)
+        self._cache: CacheHandler = caches[ESI_CACHE_BACKEND_NAME]
 
     def __call__(self, *args, **kwargs) -> 'BaseESIClientOperation':
         self._args = args
@@ -211,7 +217,7 @@ class BaseESIClientOperation:
             key: value for key, value in self._kwargs.items() if key not in ignore_keys
         }
         data = (self.method + self.url + str(self._args) + str(_kwargs)).encode('utf-8')
-        hash_str = md5(data).hexdigest()  # noqa: S324
+        hash_str = blake2b(data, digest_size=24).hexdigest()
         return f'esi:{hash_str}'
 
     def _extract_body_param(self) -> Token | None:
@@ -232,7 +238,8 @@ class BaseESIClientOperation:
         Retrieve a cached response if available and validate its freshness.
         """
         try:
-            cached_response = cache.get(f'{cache_key}:data')
+            # cached_response = pickle.loads(self._cache.get(f'{cache_key}:data'))
+            cached_response = self._cache.get(f'{cache_key}:data')
         except Exception as e:
             logger.error(
                 'Error retrieving cache for key %s:data : %s',
@@ -244,22 +251,16 @@ class BaseESIClientOperation:
 
         if cached_response:
             logger.debug('Cache hit for key %s', cache_key)
-            expires = _time_to_expire(str(cached_response.headers.get('Expires')))
-
-            if expires <= 0:
-                logger.debug(
-                    'Cache expired by %d for key %s, forcing expiration',
-                    expires,
-                    cache_key,
-                )
-                cache.delete(cache_key)
-                return None, None, None
             # check if etag is same before building models from cache
             if etag:
-                if cached_response.headers.get('Expires') == etag:
-                    raise HTTPNotModified(
-                        status_code=304, headers=cached_response.headers
+                if cached_response.headers.get('etag', None) != etag:
+                    logger.error(
+                        'ETag mismatch for cache key %s: cached etag %s, provided etag %s',
+                        cache_key,
+                        cached_response.headers.get('etag', None),
+                        etag,
                     )
+                    return None, None, None
             headers, data = self.parse_cached_request(cached_response)
             return headers, data, cached_response
         return None, None, None
@@ -268,25 +269,20 @@ class BaseESIClientOperation:
         """
         Store a response in the cache with an ETag and appropriate TTL.
         """
-        expires = response.headers.get('Expires')
-        if 'ETag' in response.headers:
+        if 'etag' in response.headers:
             # Setting ETag to 3x the Expires time to allow for some leeway and to make sure that we dont keep a bunch
             # of useless etags around if we are not making the requests
-            cache.set(
-                f'{cache_key}:etag',
-                response.headers['ETag'],
-                timeout=(_time_to_expire(expires) * 1.5) if expires else 86400,
-            )
+            self._cache.set(f'{cache_key}:etag', response.headers.get('etag'))
 
-        ttl = _time_to_expire(expires) if expires else 0
-        if ttl > 0:
-            try:
-                cache.set(f'{cache_key}:data', response, ttl)
-                logger.debug(
-                    'Stored response in cache with key %s for %ss', cache_key, ttl
-                )
-            except Exception:
-                logger.exception('Error storing cache for key %s', cache_key)
+        try:
+            # self._cache.set(f'{cache_key}:data', pickle.dumps(response))
+            self._cache.set(f'{cache_key}:data', response)
+            # Set a timestamp for when this was stored so that we can cleanup later
+            # while still ensuring that we can respect 304 responses
+            # self._cache.set(f'{cache_key}:stored', pickle.dumps(datetime.now(tz=UTC)))
+            self._cache.set(f'{cache_key}:stored', datetime.now(tz=UTC))
+        except Exception:
+            logger.exception('Error storing cache for key %s', cache_key)
 
     def _extract_token_param(self) -> Token | None:
         """
@@ -346,7 +342,7 @@ class ESIClientOperation(BaseESIClientOperation):
     def _make_request(
         self, parameters: dict[str, Any], etag: str | None = None
     ) -> RequestBase.Response:
-        reset = cache.get('esi_rate_limit:error_limit_reset')
+        reset = self._cache.get('esi_rate_limit:error_limit_reset')
         if reset is not None:
             # Hard stop if there is still an active error limit
             raise ESIErrorLimitExceptionError(reset=reset)
@@ -377,7 +373,7 @@ class ESIClientOperation(BaseESIClientOperation):
                 req.req.headers['If-None-Match'] = etag
             return req.request(
                 data=self.body, parameters=self._reverse_normalize_params(parameters)
-            )  # pyright: ignore[reportAttributeAccessIssue]
+            )
 
         return retry(__func)
 
@@ -394,74 +390,56 @@ class ESIClientOperation(BaseESIClientOperation):
         self.body = self._extract_body_param()
         parameters = self._kwargs | extra
         cache_key_base = self._cache_key()
-        cache_key = f'{cache_key_base}:data'
+        cache_key = f'{cache_key_base}'
         etag_key = f'{cache_key_base}:etag'
 
         # make sure that we have an etag if we are using the cache
         if not etag and not disable_etag and ESI_CACHE_RESPONSE:
-            etag = cache.get(etag_key)
+            # etag = self._cache.get(etag_key).decode('ascii') if self._cache.get(etag_key) else None
+            etag = self._cache.get(etag_key) if self._cache.get(etag_key) else None
 
-        # # make sure that we skip trying to get a cache response if
-        # # the cache is disabled for the request
-        # if not use_cache or (not is_retry and disable_etag):
-        #     headers, data, response = self._get_cache(cache_key, etag=etag)
-        # else:
-        #     headers, data, response = None, None, None
-
-        headers, data, response = (
-            self._get_cache(cache_key, etag=etag)
-            if use_cache and (not is_retry or not disable_etag)
-            else (None, None, None)
-        )
-
-        if response and use_cache:
-            expires = _time_to_expire(str(headers.get('Expires')))  # pyright: ignore[reportOptionalMemberAccess]
-            if expires < 0:
-                logger.warning('cache expired by %d seconds, Forcing expiry', expires)
-                response = None
-                data = None
-                headers = None
-
-        if not response:
-            logger.debug('Cache miss for key %s', cache_key)
-            try:
-                headers, data, response = self._make_request(parameters, etag)
-                if response.status_code == 420:
-                    reset = response.headers.get('X-RateLimit-Reset', None)
-                    cache.set('esi_error_limit_reset', reset, timeout=reset)
-                    raise ESIErrorLimitExceptionError(reset=reset)
-                if ESI_CACHE_RESPONSE and use_cache:
-                    self._store_cache(cache_key, response)
-            except base_HTTPServerError as e:
-                raise HTTPServerError(
-                    status_code=e.status_code, headers=e.headers, data=e.data
-                ) from e
-
-            except base_HTTPClientError as e:
-                raise HTTPClientError(
-                    status_code=e.status_code, headers=e.headers, data=e.data
-                ) from e
-            if response.status_code == 304:
-                # Not modified, use cached data
-                logger.debug('Received 304 Not Modified, using cached data')
-                headers, data, response = self._get_cache(cache_key, etag=etag)
-                if not response and not is_retry:
-                    logger.debug(
-                        'Received 304 but no cached response found, forcing refetch without ETag'
-                    )
-                    return self.result(
-                        etag=None,
-                        return_response=return_response,
-                        use_cache=use_cache,
-                        is_retry=True,
-                        disable_etag=True,
-                        **extra,
-                    )
-                if not response and is_retry:
-                    raise HTTPNotModified(
-                        status_code=304,
-                        headers=response.headers,  # pyright: ignore[reportAttributeAccessIssue]
-                    )
+        # always make the request, if we get a 304 we will use the cache
+        try:
+            headers, data, response = self._make_request(parameters, etag)
+            # make sure that we hard stop on 420 since we are error limited
+            if response.status_code == 420:
+                reset = response.headers.get('X-RateLimit-Reset', None)
+                self._cache.set('esi_error_limit_reset', reset, timeout=reset)
+                raise ESIErrorLimitExceptionError(reset=reset)
+        except base_HTTPServerError as e:
+            raise HTTPServerError(
+                status_code=e.status_code, headers=e.headers, data=e.data
+            ) from e
+        except base_HTTPClientError as e:
+            raise HTTPClientError(
+                status_code=e.status_code, headers=e.headers, data=e.data
+            ) from e
+        if response.status_code == 304:
+            # Not modified, use cached data
+            logger.debug('Received 304 Not Modified, using cached data')
+            headers, data, response = self._get_cache(cache_key, etag=etag)
+            if not response and not is_retry:
+                logger.debug(
+                    'Received 304 but no cached response found, forcing refetch without ETag'
+                )
+                return self.result(
+                    etag=None,
+                    return_response=return_response,
+                    use_cache=use_cache,
+                    is_retry=True,
+                    disable_etag=True,
+                    **extra,
+                )
+            if not response and is_retry:
+                logger.debug(
+                    'Received 304 but no cached response found on retry, raising 304'
+                )
+                raise HTTPNotModified(
+                    status_code=304,
+                    headers=response.headers,
+                )
+        if response and use_cache and ESI_CACHE_RESPONSE:
+            self._store_cache(cache_key, response)
 
         return (data, response) if return_response else data
 

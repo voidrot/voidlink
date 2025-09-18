@@ -1,5 +1,7 @@
 from django.conf import settings
 
+ESI_CACHE_BACKEND_NAME = getattr(settings, 'ESI_CACHE_BACKEND_NAME', 'esi')
+
 # General Settings
 ESI_OAUTH_URL = getattr(
     settings, 'ESI_SSO_BASE_URL', 'https://login.eveonline.com/v2/oauth'

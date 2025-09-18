@@ -17,7 +17,16 @@ build:
 # up: Start up containers.
 up:
     @echo "Starting up containers..."
-    @docker compose up -d --remove-orphans
+    @docker compose up -d --remove-orphans --build --quiet-build postgres redis mailpit
+
+celery-up +target:
+    @echo "Starting up containers with Celery..."
+    @just up
+    @docker compose up -d --remove-orphans --build --quiet-build postgres redis mailpit app celery-beat celery-worker-default celery-flower celery-worker-{{target}}
+
+celery-down +target:
+    @echo "Stopping Celery worker {{target}}..."
+    @docker compose stop celery-worker-{{target}}
 
 # down: Stop containers.
 down:

@@ -1,11 +1,16 @@
 import logging
 
-from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, redirect
+from django.http import HttpRequest
+from django.http import HttpResponse
+from django.http import HttpResponseBadRequest
+from django.shortcuts import get_object_or_404
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
+
 from apps.esi.helpers import generate_sso_redirect
-from apps.esi.models import CallbackRedirect, Token
+from apps.esi.models import CallbackRedirect
+from apps.esi.models import Token
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +60,9 @@ def sso_redirect(
         logger.warning(
             'Unsafe redirect URL detected for %s session %s: %s',
             request.user,
-            request.session.session_key[:5] if request.session.session_key else '[no key]',
+            request.session.session_key[:5]
+            if request.session.session_key
+            else '[no key]',
             url,
         )
         return HttpResponseBadRequest('Unsafe redirect URL.')
@@ -63,9 +70,7 @@ def sso_redirect(
     redirect_url, state = generate_sso_redirect(scopes, url)
 
     CallbackRedirect.objects.create(
-        session_key=request.session.session_key,
-        state=state,
-        url=url
+        session_key=request.session.session_key, state=state, url=url
     )
 
     logger.debug(

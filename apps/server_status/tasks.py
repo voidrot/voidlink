@@ -17,8 +17,8 @@ def fetch_server_status():
     response = op.result()
     logger.debug('Server status response: %s', response)
     ServerStatus(
-        player_count=response.players,  # pyright: ignore[reportAttributeAccessIssue]
-        server_version=response.server_version,  # pyright: ignore[reportAttributeAccessIssue]
-        start_time=response.start_time,  # pyright: ignore[reportAttributeAccessIssue]
-        vip_mode=response.vip,  # pyright: ignore[reportAttributeAccessIssue]
+        player_count=response.players,
+        server_version=response.server_version,
+        start_time=response.start_time,
+        vip_mode=response.vip if response.vip is not None else False,
     ).save()

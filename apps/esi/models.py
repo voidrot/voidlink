@@ -180,6 +180,7 @@ class Token(models.Model):
             raise TokenError(msg)
         return token
 
+
 class CallbackRedirect(models.Model):
     """
     Store state values for EVE SSO callback redirects.

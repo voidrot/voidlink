@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:latest
     restart: unless-stopped
+    command: -c 'max_connections=500'
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -33,18 +34,428 @@ services:
       MP_DATABASE: /data/mailpit.db
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+  app: &app
+    build:
+      context: .
+      dockerfile: ./docker/local/Dockerfile
+    image: voidlink-app:local
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    ports:
+      - "8000:8000"
+    volumes:
+      - /app/.venv
+      - .:/app:z
+    command: /start-app
   
-  # mock-server:
-  #   image: stoplight/prism:5
-  #   command:
-  #     - mock
-  #     - --host
-  #     - '0.0.0.0'
-  #     - --errors
-  #     # - --dynamic
-  #     - https://esi.evetech.net/meta/openapi.yaml
-  #   ports:
-  #     - "4010:4010"
+  celery-beat:
+    <<: *app
+    image: voidlink-celery-beat:local
+    command: /start-celerybeat
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    ports: []
+  
+  celery-flower:
+    <<: *app
+    image: voidlink-celery-flower:local
+    command: /start-celeryflower
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    ports:
+      - 5555:5555
+  
+  celery-worker-default:
+    <<: *app
+    image: voidlink-celery-worker-default:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: default
+    ports: []
+
+  celery-worker-users:
+    <<: *app
+    image: voidlink-celery-worker-users:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: users
+    ports: []
+  
+  celery-worker-esi:
+    <<: *app
+    image: voidlink-celery-worker-esi:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi
+    ports: []
+  
+  celery-worker-server-status:
+    <<: *app
+    image: voidlink-celery-worker-server-status:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_server_status
+    ports: []
+
+  celery-worker-alliance:
+    <<: *app
+    image: voidlink-celery-worker-alliance:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_alliance
+    ports: []
+  
+  celery-worker-asset:
+    <<: *app
+    image: voidlink-celery-worker-asset:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_asset
+    ports: []
+  
+  celery-worker-character:
+    <<: *app
+    image: voidlink-celery-worker-character:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_character
+    ports: []
+  
+  celery-worker-clones:
+    <<: *app
+    image: voidlink-celery-worker-clones:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_clones
+    ports: []
+
+
+  celery-worker-contacts:
+    <<: *app
+    image: voidlink-celery-worker-contacts:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_contacts
+    ports: []
+  
+  celery-worker-contracts:
+    <<: *app
+    image: voidlink-celery-worker-contracts:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_contracts
+    ports: []
+
+  celery-worker-corporation:
+    <<: *app
+    image: voidlink-celery-worker-corporation:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_corporation
+    ports: []
+  
+  celery-worker-faction_warfare:
+    <<: *app
+    image: voidlink-celery-worker-faction_warfare:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_faction_warfare
+    ports: []
+  
+  celery-worker-fittings:
+    <<: *app
+    image: voidlink-celery-worker-fittings:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_fittings
+    ports: []
+  
+  celery-worker-fleets:
+    <<: *app
+    image: voidlink-celery-worker-fleets:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_fleets
+    ports: []
+  
+  celery-worker-incursions:
+    <<: *app
+    image: voidlink-celery-worker-incursions:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_incursions
+    ports: []
+  
+  celery-worker-industry:
+    <<: *app
+    image: voidlink-celery-worker-industry:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_industry
+    ports: []
+  
+  celery-worker-insurance:
+    <<: *app
+    image: voidlink-celery-worker-insurance:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_insurance
+    ports: []
+  
+  celery-worker-killmails:
+    <<: *app
+    image: voidlink-celery-worker-killmails:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_killmails
+    ports: []
+  
+  celery-worker-location:
+    <<: *app
+    image: voidlink-celery-worker-location:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_location
+    ports: []
+
+  celery-worker-loyalty:
+    <<: *app
+    image: voidlink-celery-worker-loyalty:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_loyalty
+    ports: []
+
+  celery-worker-mail:
+    <<: *app
+    image: voidlink-celery-worker-mail:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_mail
+    ports: []
+
+  celery-worker-market:
+    <<: *app
+    image: voidlink-celery-worker-market:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_market
+    ports: []
+  
+  celery-worker-planetary-interaction:
+    <<: *app
+    image: voidlink-celery-worker-planetary-interaction:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_planetary_interaction
+    ports: []
+  
+  celery-worker-skills:
+    <<: *app
+    image: voidlink-celery-worker-skills:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_skills
+    ports: []
+  
+  celery-worker-sovereignty:
+    <<: *app
+    image: voidlink-celery-worker-sovereignty:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_sovereignty
+    ports: []
+  
+  celery-worker-wallet:
+    <<: *app
+    image: voidlink-celery-worker-wallet:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_wallet
+    ports: []
+  
+  celery-worker-wars:
+    <<: *app
+    image: voidlink-celery-worker-wars:local
+    command: /start-celeryworker
+    depends_on:
+      - postgres
+      - redis
+      - mailpit
+    env_file:
+      - .env.compose
+    environment:
+      CELERY_QUEUE: esi_wars
+    ports: []
 
 volumes:
   postgres_data:

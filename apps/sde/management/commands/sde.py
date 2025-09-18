@@ -163,7 +163,7 @@ class Command(BaseCommand):
         return True
 
     # Download the SDE data
-    def download_sde(self, force_download: bool) -> None:  # noqa: FBT001
+    def download_sde(self, force_download: bool) -> None:
         needs_download = False
         if Path(self.workspace_dir / 'sde.zip').exists() and not force_download:
             logger.info('SDE zip already exists, validating checksums...')
