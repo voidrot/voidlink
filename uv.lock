@@ -564,14 +564,14 @@ wheels = [
 
 [[package]]
 name = "django-daisy"
-version = "1.1.0"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/38/b9/101f48ad7658908e472de24a9e6cc42ee72cd66e1577518ac6740842d739/django_daisy-1.1.0.tar.gz", hash = "sha256:7e03f09a2d4dbbcb9d0de2d0c9c5bdb890cc023f4a677ea70abf5d07877c8efe", size = 2582182, upload-time = "2025-08-12T10:34:11.999Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/3f/108a0c62f881187b06a3c28ede8b79002d21124978a9ee8cc5e7227f7090/django_daisy-1.1.1.tar.gz", hash = "sha256:96caa16e050d1f50e13947ec090e3562fad974cb6ac69aab90a4fb14c6e426fb", size = 2584523, upload-time = "2025-09-16T09:05:13.949Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b4/65/0c781dc04ab76227328dff4df93262a126077601662a86ec3da58757e018/django_daisy-1.1.0-py3-none-any.whl", hash = "sha256:48767008a3b94017396675d0f9e0ca280aa2365d8ed0f0fee5f9c9b14bb27c8b", size = 2410405, upload-time = "2025-08-12T10:34:10.1Z" },
+    { url = "https://files.pythonhosted.org/packages/32/8b/0eff561fecf4c26ce3756d94ea0f16e9afeab78d377f9377906d3a95d8d7/django_daisy-1.1.1-py3-none-any.whl", hash = "sha256:4ad7fbe5197b5d50343e12675cf51f22e07d78f1a357617addeb804dd7ffa517", size = 2411455, upload-time = "2025-09-16T09:05:12.394Z" },
 ]
 
 [[package]]
